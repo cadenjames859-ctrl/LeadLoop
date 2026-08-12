@@ -1,0 +1,80 @@
+// LeadLoop database schema
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  leads         Lead[]
+
+  @@map("users")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  FOLLOW_UP
+  BOOKED
+  LOST
+}
+
+model Lead {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  customerName      String
+  phone             String?
+  email             String?
+  service           String
+  estimatedValue    Decimal    @default(0) @db.Decimal(10, 2)
+  notes             String?
+  status            LeadStatus @default(NEW)
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  lastContactedAt   DateTime?
+  nextFollowUpAt    DateTime?
+
+  followUps         FollowUp[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, nextFollowUpAt])
+  @@map("leads")
+}
+
+enum FollowUpType {
+  GENERATED_MESSAGE
+  NOTE
+  STATUS_CHANGE
+}
+
+model FollowUp {
+  id        String       @id @default(cuid())
+  leadId    String
+  lead      Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  message   String
+  type      FollowUpType @default(GENERATED_MESSAGE)
+
+  createdAt DateTime     @default(now())
+  sentAt    DateTime?
+
+  @@index([leadId])
+  @@map("follow_ups")
+}
