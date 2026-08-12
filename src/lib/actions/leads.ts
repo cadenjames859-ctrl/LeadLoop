@@ -12,7 +12,13 @@ import {
 } from "@/lib/leads-data";
 import { generateFollowUpMessage } from "@/lib/ai/followUp";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE_LEAD_STATUSES } from "@/lib/leadStatus";
+import { FREE_PLAN_ACTIVE_LEAD_LIMIT } from "@/lib/plan";
 import type { LeadStatus } from "@/generated/prisma/enums";
+
+export type GenerateFollowUpResult =
+  | { ok: true; message: string; source: "mock" | "ai"; followUpId: string }
+  | { ok: false; reason: "not_found" | "upgrade_required"; message: string };
 
 export interface LeadFormState {
   error?: string;
@@ -58,6 +64,19 @@ export async function createLeadAction(
       if (!fieldErrors[key]) fieldErrors[key] = issue.message;
     }
     return { error: "Please fix the highlighted fields.", fieldErrors, values: raw };
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.plan === "FREE") {
+    const activeLeadCount = await prisma.lead.count({
+      where: { userId, status: { in: ACTIVE_LEAD_STATUSES } },
+    });
+    if (activeLeadCount >= FREE_PLAN_ACTIVE_LEAD_LIMIT) {
+      return {
+        error: `You've reached the Free plan's ${FREE_PLAN_ACTIVE_LEAD_LIMIT}-active-lead limit. Upgrade to Pro in Settings for unlimited leads.`,
+        values: raw,
+      };
+    }
   }
 
   const lead = await createLeadForUser(userId, parsed.data);
@@ -160,11 +179,21 @@ export async function deleteLeadAction(leadId: string) {
   redirect("/leads");
 }
 
-export async function generateFollowUpAction(leadId: string) {
+export async function generateFollowUpAction(leadId: string): Promise<GenerateFollowUpResult> {
   const userId = await requireUserId();
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.plan === "FREE") {
+    return {
+      ok: false,
+      reason: "upgrade_required",
+      message: "Follow-up message drafts are a Pro feature. Upgrade in Settings to generate them.",
+    };
+  }
+
   const lead = await prisma.lead.findFirst({ where: { id: leadId, userId } });
   if (!lead) {
-    throw new Error("Lead not found.");
+    return { ok: false, reason: "not_found", message: "Lead not found." };
   }
 
   const { message, source } = await generateFollowUpMessage({
@@ -186,5 +215,5 @@ export async function generateFollowUpAction(leadId: string) {
 
   revalidatePath(`/leads/${leadId}`);
 
-  return { message, source, followUpId: followUp.id };
+  return { ok: true, message, source, followUpId: followUp.id };
 }

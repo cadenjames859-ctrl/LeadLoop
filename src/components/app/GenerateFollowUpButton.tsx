@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { IconSparkles, IconCopy, IconCheckCircle } from "@/components/ui/icons";
@@ -15,12 +16,19 @@ export function GenerateFollowUpButton({ leadId }: { leadId: string }) {
   const [source, setSource] = useState<"mock" | "ai" | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
 
   function handleGenerate() {
     setError(null);
+    setUpgradeRequired(false);
     startTransition(async () => {
       try {
         const result = await generateFollowUpAction(leadId);
+        if (!result.ok) {
+          setError(result.message);
+          setUpgradeRequired(result.reason === "upgrade_required");
+          return;
+        }
         setMessage(result.message);
         setSource(result.source);
         setCopied(false);
@@ -48,7 +56,19 @@ export function GenerateFollowUpButton({ leadId }: { leadId: string }) {
         <IconSparkles className="h-4 w-4" />
         {isPending ? "Generating…" : "Generate Follow-Up Message"}
       </Button>
-      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+      {error ? (
+        <p className="mt-2 text-sm text-danger">
+          {error}
+          {upgradeRequired ? (
+            <>
+              {" "}
+              <Link href="/settings" className="font-medium underline hover:text-danger/80">
+                Upgrade to Pro
+              </Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Follow-Up Message">
         <div className="space-y-4">

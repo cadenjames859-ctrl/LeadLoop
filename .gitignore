@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# accidental secrets — never commit these
+recovery-codes.txt
+*.recovery-codes.txt
